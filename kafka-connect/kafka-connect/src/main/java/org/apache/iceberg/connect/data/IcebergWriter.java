@@ -60,6 +60,14 @@ class IcebergWriter implements RecordWriter {
     try {
       // ignore tombstones...
       if (record.value() != null) {
+        // If CDC is enabled, extract the op from the raw Kafka value before conversion
+        // and store it in the ThreadLocal so BaseDeltaWriter can access it
+        String cdcField = config.tablesCdcField();
+        if (cdcField != null && !cdcField.isEmpty()) {
+          Object cdcValue = RecordUtils.extractFromRecordValue(record.value(), cdcField);
+          BaseDeltaWriter.CDC_OP.set(cdcValue != null ? cdcValue.toString() : null);
+        }
+
         Record row = convertToRow(record);
         writer.write(row);
       }

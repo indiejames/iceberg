@@ -37,6 +37,10 @@ import org.apache.iceberg.types.TypeUtil;
 
 abstract class BaseDeltaWriter extends BaseTaskWriter<Record> {
 
+  // ThreadLocal to pass the CDC op value from IcebergWriter (where the raw Kafka Map
+  // is available) down to BaseDeltaWriter (which only sees the converted Iceberg Record)
+  static final ThreadLocal<String> CDC_OP = new ThreadLocal<>();
+
   private final Schema schema;
   private final Schema deleteSchema;
   private final InternalRecordWrapper wrapper;
@@ -76,8 +80,7 @@ abstract class BaseDeltaWriter extends BaseTaskWriter<Record> {
 
   @Override
   public void write(Record row) throws IOException {
-
-    Operation op = Operation.fromString(getCdcOpFromRow(row));
+    Operation op = Operation.fromString(getCdcOpFromRow());
     RowDataDeltaWriter writer = route(row);
 
     switch (op) {
@@ -99,27 +102,19 @@ abstract class BaseDeltaWriter extends BaseTaskWriter<Record> {
           writer.delete(row);
         }
         break;
-
       default:
         throw new UnsupportedOperationException("Unknown row kind: " + op);
     }
   }
 
-  private String getCdcOpFromRow(Record row) {
-    Record currentFieldLookup = row;
-    for (String field : cdcField) {
-      Object value = currentFieldLookup.getField(field);
-      if (value == null) {
-        throw new IllegalArgumentException("CDC field " + String.join(".", cdcField) + " is null");
-      }
-      if (value instanceof String) {
-        return (String) value;
-      } else {
-        currentFieldLookup = (Record) value;
-      }
+  private String getCdcOpFromRow() {
+    String op = CDC_OP.get();
+    CDC_OP.remove(); // clear after use to avoid stale values
+    if (op == null) {
+      throw new IllegalArgumentException(
+          "CDC field " + String.join(".", cdcField) + " is null");
     }
-    throw new IllegalArgumentException(
-        "CDC field " + String.join(".", cdcField) + " is not a string");
+    return op;
   }
 
   public InternalRecordWrapper getWrapper() {
