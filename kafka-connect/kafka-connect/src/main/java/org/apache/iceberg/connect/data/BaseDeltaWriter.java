@@ -111,8 +111,7 @@ abstract class BaseDeltaWriter extends BaseTaskWriter<Record> {
     String op = CDC_OP.get();
     CDC_OP.remove(); // clear after use to avoid stale values
     if (op == null) {
-      throw new IllegalArgumentException(
-          "CDC field " + String.join(".", cdcField) + " is null");
+      throw new IllegalArgumentException("CDC field " + String.join(".", cdcField) + " is null");
     }
     return op;
   }
